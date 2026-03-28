@@ -153,6 +153,7 @@ cp config.example.yaml config.yaml
 你：看看有什么主题                → 主题画廊
 你：换成 sspai 主题               → 切换主题
 你：看看文章数据怎么样            → 效果复盘
+你：做一个小绿书                  → 图片帖（横滑轮播）
 ```
 
 ## 目录结构
@@ -175,10 +176,10 @@ wewrite/
 │   └── optimize_loop.py        # autoresearch 风格迭代优化框架
 │
 ├── toolkit/                  # Markdown → 微信工具链
-│   ├── cli.py                  # CLI（preview / publish / gallery / themes）
+│   ├── cli.py                  # CLI（preview / publish / gallery / themes / image-post）
 │   ├── converter.py            # Markdown → 内联样式 HTML + 微信兼容修复
 │   ├── theme.py                # YAML 主题引擎
-│   ├── publisher.py            # 微信草稿箱 API
+│   ├── publisher.py            # 微信草稿箱 API + 小绿书图片帖
 │   ├── wechat_api.py           # access_token / 图片上传
 │   ├── image_gen.py            # AI 图片生成（doubao / OpenAI）
 │   └── themes/                 # 16 套排版主题（含暗黑模式）
@@ -219,7 +220,7 @@ Step 5  SEO 优化 → 去 AI 逐层验证（9 项自检）
   ↓
 Step 6  视觉 AI（封面 + 内文配图）
   ↓
-Step 7  排版 + 发布（16 主题 + 微信兼容修复）
+Step 7  预检 + 排版 + 发布（16 主题 + 微信兼容修复）
   ↓
 Step 8  写入历史 → 回复用户（含编辑建议 + 飞轮提示）
 ```
@@ -251,6 +252,9 @@ python3 toolkit/cli.py gallery
 
 # 发布草稿箱
 python3 toolkit/cli.py publish article.md --cover cover.png --title "标题"
+
+# 小绿书/图片帖（横滑轮播，3:4 比例，最多 20 张）
+python3 toolkit/cli.py image-post photo1.jpg photo2.jpg photo3.jpg -t "周末探店" -c "在望京发现的宝藏咖啡馆"
 
 # 抓热点
 python3 scripts/fetch_hotspots.py --limit 20
