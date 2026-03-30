@@ -33,6 +33,7 @@ build/
 
 # Internal dev docs
 docs/
+CLAUDE.md
 
 # IDE
 .vscode/
