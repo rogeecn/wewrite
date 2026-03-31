@@ -45,7 +45,9 @@ allowed-tools:
 
 **辅助功能**（按需加载，不在主管道内）：
 - 用户说"重新设置风格" → `读取: {skill_dir}/references/onboard.md`
-- 用户说"学习我的修改" → `读取: {skill_dir}/references/learn-edits.md`
+- 用户说"学习我的修改" → `读取: {skill_dir}/references/learn-edits.md`。支持两种来源：
+  - **本地修改**（默认）：用户在 `output/` 的 markdown 文件中修改
+  - **微信草稿箱同步**：`python3 {skill_dir}/scripts/learn_edits.py --from-wechat`，自动从草稿箱拉回最新内容，与本地原文做纯文本 diff
 - 用户说"看看文章数据" → `读取: {skill_dir}/references/effect-review.md`
 - 用户说"检查一下"/"自检"/"这篇文章怎么样" → 对最近一篇生成的文章（或用户指定的文章）执行自检，输出生成报告：
 
@@ -448,14 +450,10 @@ python3 {skill_dir}/toolkit/cli.py preview {markdown} --theme {theme} --no-open 
   stats: null
 ```
 
-**8.2 编辑建议**：
-
-如果用户想让 WeWrite 学习自己的修改风格，需要在 WeWrite 输出的 markdown 文件（`output/` 目录）中直接修改，然后说"学习我的修改"。微信草稿箱内的修改无法同步回 WeWrite，因此建议用户：先在本地 markdown 改完 → 说"学习我的修改" → 再重新推送。
-
-**8.3 回复用户**：
+**8.2 回复用户**：
 
 - 最终标题 + 2 备选 + 摘要 + 5 标签 + media_id
-- 编辑建议："文章有 2-3 个编辑锚点，建议在 `output/` 目录的 markdown 文件里加入你自己的话，改完后说**'学习我的修改'**再重新推送，效果更好。"
+- 编辑建议："文章有 2-3 个编辑锚点，建议加入你自己的话。你可以在本地 markdown 里改，也可以直接在微信草稿箱改——改完后说**'学习我的修改'**，WeWrite 都能学到你的风格。"
 
 **8.3 后续操作**：
 
@@ -468,7 +466,7 @@ python3 {skill_dir}/toolkit/cli.py preview {markdown} --theme {theme} --no-open 
 | 看看有什么主题 | `python3 {skill_dir}/toolkit/cli.py gallery` |
 | 换成 XX 主题 | 重新渲染 |
 | 看看文章数据 | `读取: {skill_dir}/references/effect-review.md` |
-| 学习我的修改 | `读取: {skill_dir}/references/learn-edits.md`。需要在 `output/` 目录的 markdown 文件中修改，不支持微信草稿箱内的修改同步学习 |
+| 学习我的修改 | `读取: {skill_dir}/references/learn-edits.md`。支持本地 markdown 修改和微信草稿箱同步（`--from-wechat`） |
 | 做一个小绿书/图片帖 | `python3 {skill_dir}/toolkit/cli.py image-post img1.jpg img2.jpg -t "标题"` |
 | 检查一下 / 自检 / 这篇文章怎么样 | 生成报告（生成档案 + 质量检查，见辅助功能） |
 | 导入范文 / 建范文库 | `python3 {skill_dir}/scripts/extract_exemplar.py article.md` |

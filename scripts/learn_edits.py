@@ -16,7 +16,8 @@ The Agent uses this to write structured playbook.md rules.
 
 Usage:
     python3 learn_edits.py --draft path/to/draft.md --final path/to/final.md
-    python3 learn_edits.py --summarize          # all lessons with confidence
+    python3 learn_edits.py --from-wechat         # auto-sync from WeChat draft box
+    python3 learn_edits.py --summarize           # all lessons with confidence
     python3 learn_edits.py --summarize --json    # JSON output for agent
 """
 
@@ -46,6 +47,102 @@ PATTERN_TYPES = {
 
 def load_text(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
+
+
+def markdown_to_plaintext(md: str) -> str:
+    """Strip markdown formatting to plain text for diff comparison."""
+    text = md
+    # Remove HTML comments (editing anchors etc.)
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    # Remove markdown headers markers
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove bold/italic markers
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)
+    # Remove inline code
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Remove link syntax [text](url) → text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Remove image syntax
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    # Collapse whitespace
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def fetch_wechat_draft() -> tuple[str, str, str]:
+    """
+    Fetch the latest draft from WeChat and find the corresponding local file.
+    Returns (draft_plaintext, final_plaintext, draft_path).
+    """
+    # Load config
+    config_path = SKILL_DIR / "config.yaml"
+    if not config_path.exists():
+        raise FileNotFoundError("config.yaml not found — need WeChat API credentials")
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    wechat = config.get("wechat", {})
+    appid = wechat.get("appid", "")
+    secret = wechat.get("secret", "")
+    if not appid or not secret:
+        raise ValueError("config.yaml missing wechat.appid or wechat.secret")
+
+    # Load history to find latest article with media_id
+    history_path = SKILL_DIR / "history.yaml"
+    if not history_path.exists():
+        raise FileNotFoundError("history.yaml not found — no articles to compare")
+
+    with open(history_path) as f:
+        history = yaml.safe_load(f) or []
+
+    # Find most recent article with media_id
+    latest = None
+    for article in reversed(history):
+        if article.get("media_id"):
+            latest = article
+            break
+
+    if not latest:
+        raise ValueError("No article with media_id found in history.yaml")
+
+    media_id = latest["media_id"]
+    title = latest.get("title", "")
+
+    # Find the local draft file
+    date = latest.get("date", "")
+    output_dir = SKILL_DIR / "output"
+    draft_path = None
+    if date:
+        candidates = list(output_dir.glob(f"{date}-*.md"))
+        if candidates:
+            draft_path = candidates[0]
+
+    if not draft_path or not draft_path.exists():
+        raise FileNotFoundError(
+            f"Cannot find local draft for '{title}' (date={date}) in output/"
+        )
+
+    # Get access token and fetch draft from WeChat
+    sys.path.insert(0, str(SKILL_DIR / "toolkit"))
+    from wechat_api import get_access_token
+    from publisher import get_draft, html_to_plaintext
+
+    token = get_access_token(appid, secret)
+    html = get_draft(token, media_id)
+    wechat_text = html_to_plaintext(html)
+
+    # Convert local draft to plaintext
+    local_md = load_text(str(draft_path))
+    local_text = markdown_to_plaintext(local_md)
+
+    print(f"本地文件: {draft_path}")
+    print(f"微信草稿: media_id={media_id}")
+    print(f"文章标题: {title}")
+    print(f"本地字数: {len(local_text)}, 微信字数: {len(wechat_text)}")
+
+    return local_text, wechat_text, str(draft_path)
 
 
 def split_sections(text: str) -> list[dict]:
@@ -276,6 +373,8 @@ def main():
     parser = argparse.ArgumentParser(description="Learn from human edits")
     parser.add_argument("--draft", help="Path to AI draft")
     parser.add_argument("--final", help="Path to human-edited final")
+    parser.add_argument("--from-wechat", action="store_true",
+                        help="Auto-fetch edited version from WeChat draft box")
     parser.add_argument("--summarize", action="store_true", help="Summarize all lessons")
     parser.add_argument("--json", action="store_true", help="JSON output (with --summarize)")
     args = parser.parse_args()
@@ -284,8 +383,22 @@ def main():
         summarize_lessons(as_json=args.json)
         return
 
+    if args.from_wechat:
+        local_text, wechat_text, draft_path = fetch_wechat_draft()
+        if local_text == wechat_text:
+            print("\n微信草稿与本地文件内容一致，没有修改。")
+            return
+        diff_result = compute_diff(local_text, wechat_text)
+        # Save with special marker for wechat source
+        lesson_file = save_lesson(diff_result, draft_path, f"wechat:{draft_path}")
+        print(f"\nLesson saved to: {lesson_file}")
+        print(f"\n检测到 {diff_result['lines_added']} 处新增, {diff_result['lines_deleted']} 处删除")
+        print(f"字数变化: {diff_result['char_diff']:+d}")
+        print(f"\nAgent 接下来读取 {draft_path} 和微信草稿内容，分析修改模式并写入 {lesson_file}")
+        return
+
     if not args.draft or not args.final:
-        print("Error: --draft and --final required", file=sys.stderr)
+        print("Error: --draft and --final required (or use --from-wechat)", file=sys.stderr)
         sys.exit(1)
 
     draft = load_text(args.draft)
