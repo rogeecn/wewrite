@@ -225,26 +225,35 @@ class GeminiProvider(ImageProvider):
         self._base_url = base_url
 
     def generate(self, prompt: str, size: str) -> bytes:
+        # Append size instruction to prompt (Gemini doesn't have a native size param)
+        if "x" in size:
+            w, h = size.split("x", 1)
+            prompt = f"{prompt}\n\nGenerate this image at {w}x{h} resolution."
+
         body = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         }
-        session = requests.Session()
-        session.trust_env = False
-        resp = session.post(
-            f"{self._base_url}/models/{self._model}:generateContent?key={self._api_key}",
-            headers={"Content-Type": "application/json"},
+        resp = requests.post(
+            f"{self._base_url}/models/{self._model}:generateContent",
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": self._api_key,
+            },
             json=body,
             timeout=120,
         )
-        data = resp.json()
         if resp.status_code != 200:
-            error = data.get("error", {})
-            msg = error.get("message", json.dumps(data, ensure_ascii=False))
+            try:
+                error = resp.json().get("error", {})
+                msg = error.get("message", resp.text[:200])
+            except (ValueError, KeyError):
+                msg = resp.text[:200]
             raise ValueError(f"Gemini API error ({resp.status_code}): {msg}")
+        data = resp.json()
         candidates = data.get("candidates", [])
         if not candidates:
-            raise ValueError(f"No candidates in Gemini response")
+            raise ValueError("No candidates in Gemini response")
         parts = candidates[0].get("content", {}).get("parts", [])
         for part in parts:
             inline_data = part.get("inlineData")
